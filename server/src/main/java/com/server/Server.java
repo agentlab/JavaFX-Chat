@@ -1,19 +1,24 @@
 package com.server;
 
-import com.exception.DuplicateUsernameException;
-import com.messages.Message;
-import com.messages.MessageType;
-import com.messages.Status;
-import com.messages.User;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.exception.DuplicateUsernameException;
+import com.messages.Message;
+import com.messages.MessageType;
+import com.messages.Status;
+import com.messages.User;
 
 public class Server {
 
@@ -23,6 +28,19 @@ public class Server {
     private static HashSet<ObjectOutputStream> writers = new HashSet<>();
     private static ArrayList<User> users = new ArrayList<>();
     static Logger logger = LoggerFactory.getLogger(Server.class);
+    private static ArrayList<Message> messages = new ArrayList<>();
+    private static HashMap<String, ObjectOutputStream> map = new HashMap<>();
+    private static Room userRoom = new Room("userRoom");
+    private static AdminRoom adminRoom = new AdminRoom("adminRoom");
+
+    public static HashMap<String, User> getNames() {
+        return names;
+    }
+
+    public static ArrayList<User> getUsers() {
+        return users;
+    }
+
 
     public static void main(String[] args) throws Exception {
         logger.info("The chat server is running.");
@@ -46,11 +64,15 @@ public class Server {
         private Logger logger = LoggerFactory.getLogger(Handler.class);
         private User user;
 
+
+
+
         public Handler(Socket socket) throws IOException {
             this.socket = socket;
         }
 
-        public void run() {
+        @Override
+		public void run() {
             logger.info("Attempting to connect a user...");
             try (
                 InputStream is = socket.getInputStream();
@@ -62,8 +84,15 @@ public class Server {
                 Message firstMessage = (Message) input.readObject();
                 checkDuplicateUsername(firstMessage);
                 writers.add(output);
+                map.put(firstMessage.getName(), output);
+                if (adminRoom.check(firstMessage.getName()))
+                {
+                    adminRoom.addUser(output, firstMessage);
+                }
+                userRoom.addUser(output, firstMessage);
                 sendNotification(firstMessage);
                 addToList();
+
 
                 while (socket.isConnected()) {
                     Message inputmsg = (Message) input.readObject();
@@ -71,10 +100,25 @@ public class Server {
                         logger.info(inputmsg.getName() + " has " + names.size());
                         switch (inputmsg.getType()) {
                             case USER:
-                                write(inputmsg);
+                            SaveMessage(inputmsg);
+                            if (adminRoom.check(inputmsg.getName()))
+                            {
+                                adminRoom.writeMessage(inputmsg);
+                            }
+                            else
+                            {
+                                userRoom.writeMessage(inputmsg);
+                            }
                                 break;
                             case VOICE:
-                                write(inputmsg);
+                            if (adminRoom.check(inputmsg.getName()))
+                            {
+                                adminRoom.writeMessage(inputmsg);
+                            }
+                            else
+                            {
+                                userRoom.writeMessage(inputmsg);
+                            }
                                 break;
                             case CONNECTED:
                                 addToList();
@@ -82,6 +126,9 @@ public class Server {
                             case STATUS:
                                 changeStatus(inputmsg);
                                 break;
+                        case DISCONNECTED:
+                            closeConnections();
+                            break;
                         }
                     }
                 }
@@ -162,19 +209,24 @@ public class Server {
          * Creates and sends a Message type to the listeners.
          */
         private void write(Message msg) throws IOException {
+
             for (ObjectOutputStream writer : writers) {
                 msg.setUserlist(names);
                 msg.setUsers(users);
                 msg.setOnlineCount(names.size());
-                logger.info(writer.toString() + " " + msg.getName() + " " + msg.getUserlist().toString());
+                logger.info(
+                    writer.toString() + " " + user.getName() + " " + msg.getName() + " "
+                        + msg.getUserlist().toString());
                 try {
                     writer.writeObject(msg);
-                    writer.reset();
+					writer.reset();
+
                 } catch (Exception ex) {
                     closeConnections();
                 }
             }
         }
+
 
         /*
          * Once a user has been disconnected, we close the open connections and remove the writers
@@ -183,6 +235,7 @@ public class Server {
             logger.debug("closeConnections() method Enter");
             logger.info("HashMap names:" + names.size() + " writers:" + writers.size() + " usersList size:" + users.size());
             if (name != null) {
+                writers.remove(map.get(name));
                 names.remove(name);
                 logger.info("User: " + name + " has been removed!");
             }
@@ -190,13 +243,45 @@ public class Server {
                 users.remove(user);
                 logger.info("User object: " + user + " has been removed!");
             }
+            if (writers != null)
+            {
+                writers.remove(map.get(user.getName()));
+                logger.info("Object: " + map.get(user.getName()) + " has been removed");
+            }
+            if (adminRoom.check(user.getName()))
+            {
+                adminRoom.removeFromList(user);
+            }
+            userRoom.removeFromList(user);
+
             try {
                 removeFromList();
             } catch (Exception e) {
                 e.printStackTrace();
             }
+
             logger.info("HashMap names:" + names.size() + " writers:" + writers.size() + " usersList size:" + users.size());
             logger.debug("closeConnections() method Exit");
         }
+
+        private static void SaveMessage(Message msg) {
+            messages.add(msg);
+        }
+
+        private void LoadMessage(ObjectOutputStream writer) {
+            for (int i = 0; i < messages.size(); i++)
+            {
+                try
+                {
+                    writer.writeObject(messages.get(i));
+                }
+                catch (Exception ex)
+                {
+                    closeConnections();
+                }
+
+            }
+        }
+
     }
 }

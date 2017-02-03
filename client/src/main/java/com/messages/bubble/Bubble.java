@@ -7,7 +7,7 @@ import javafx.scene.shape.Path;
 import javafx.scene.shape.VLineTo;
 
 public class Bubble extends Path{
-	
+
 	/*Copyright {2015} {Terah Laweh}
 
 	   Licensed under the Apache License, Version 2.0 (the "License");
@@ -93,7 +93,7 @@ public class Bubble extends Path{
 				new LineTo(3.0f, 2.5f)
 				);
 	}
-	
+
 	protected double drawRectBubbleIndicatorRule = 0.2;
 
 	private void drawRectBubbleLeftCenterIndicator() {

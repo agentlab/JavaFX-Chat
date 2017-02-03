@@ -13,6 +13,7 @@ public class Message implements Serializable {
     private ArrayList<User> list;
     private ArrayList<User> users;
 
+
     private Status status;
     private byte[] voiceMsg;
 
@@ -94,4 +95,5 @@ public class Message implements Serializable {
     public void setVoiceMsg(byte[] voiceMsg) {
         this.voiceMsg = voiceMsg;
     }
+
 }
